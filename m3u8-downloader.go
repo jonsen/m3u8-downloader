@@ -11,12 +11,12 @@ import (
 	"crypto/cipher"
 	"flag"
 	"fmt"
-	"io/ioutil"
 	"log"
 	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"runtime"
 	"strconv"
 	"strings"
@@ -45,6 +45,7 @@ var (
 	rFlag   = flag.Bool("r", true, "autoClear:是否自动清除ts文件")
 	sFlag   = flag.Int("s", 0, "InsecureSkipVerify:是否允许不安全的请求(默认0)")
 	spFlag  = flag.String("sp", "", "savePath:文件保存的绝对路径(默认为当前路径,建议默认值)")
+	headers = []string{}
 
 	logger *log.Logger
 	ro     = &grequests.RequestOptions{
@@ -80,6 +81,10 @@ func Run() {
 	now := time.Now()
 
 	// 1、解析命令行参数
+	flag.Func("h", "HTTP Header参数，支持多个-h同时传参，例如 -h User-Agent=xxx -h Cookie=xxx", func(value string) error {
+		headers = append(headers, value)
+		return nil
+	})
 	flag.Parse()
 	m3u8Url := *urlFlag
 	maxGoroutines := *nFlag
@@ -98,6 +103,19 @@ func Run() {
 	if cookie != "" {
 		ro.Headers["Cookie"] = cookie
 	}
+
+	// HTTP Header
+	reUserAgent := regexp.MustCompile(`(?i)User-(?i)Agent\=`)
+	reHeader := regexp.MustCompile(`^((?i)Referer|(?i)Cookie|(?i)Range|(?i)Icy-(?i)MetaData)\=`)
+	for _, header := range headers {
+		block := strings.Split(header, "=")
+		if reUserAgent.MatchString(header) {
+			ro.UserAgent = block[1]
+		} else if reHeader.MatchString(header) {
+			ro.Headers[block[0]] = block[1]
+		}
+	}
+
 	if !strings.HasPrefix(m3u8Url, "http") || m3u8Url == "" {
 		flag.Usage()
 		return
@@ -172,7 +190,7 @@ func getM3u8Key(host, html string) (key string) {
 			if !strings.Contains(line, "URI") {
 				continue
 			}
-			fmt.Println("[debug] line_key:",line)
+			fmt.Println("[debug] line_key:", line)
 			uri_pos := strings.Index(line, "URI")
 			quotation_mark_pos := strings.LastIndex(line, "\"")
 			key_url := strings.Split(line[uri_pos:quotation_mark_pos], "\"")[1]
@@ -187,7 +205,7 @@ func getM3u8Key(host, html string) (key string) {
 			}
 		}
 	}
-	fmt.Println("[debug] m3u8Host:",host,"m3u8Key:",key)
+	fmt.Println("[debug] m3u8Host:", host, "m3u8Key:", key)
 	return
 }
 
@@ -219,7 +237,7 @@ func getTsList(host, body string) (tsList []TsInfo) {
 }
 
 func getFromFile() string {
-	data, _ := ioutil.ReadFile("./ts.txt")
+	data, _ := os.ReadFile("./ts.txt")
 	return string(data)
 }
 
@@ -283,7 +301,7 @@ func downloadTsFile(ts TsInfo, download_dir, key string, retries int) {
 			break
 		}
 	}
-	ioutil.WriteFile(curr_path_file, origData, 0666)
+	os.WriteFile(curr_path_file, origData, 0666)
 }
 
 // downloader m3u8 下载器
@@ -330,7 +348,7 @@ func mergeTs(downloadDir string) string {
 		if f.IsDir() || filepath.Ext(path) != ".ts" {
 			return nil
 		}
-		bytes, _ := ioutil.ReadFile(path)
+		bytes, _ := os.ReadFile(path)
 		_, err = writer.Write(bytes)
 		return err
 	})
