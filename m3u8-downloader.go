@@ -106,13 +106,26 @@ func Run() {
 
 	// HTTP Header
 	reUserAgent := regexp.MustCompile(`(?i)User-(?i)Agent\=`)
-	reHeader := regexp.MustCompile(`^((?i)Referer|(?i)Cookie|(?i)Range|(?i)Icy-(?i)MetaData)\=`)
+	// reHeader := regexp.MustCompile(`^((?i)Referer|(?i)Cookie|(?i)Range|(?i)Icy-(?i)MetaData)\=`)
 	for _, header := range headers {
-		block := strings.Split(header, "=")
+		// 根据=号分割header 名称和值
+		block := strings.SplitN(header, "=", 2)
+		if len(block) != 2 {
+			continue
+		}
+
+		name := strings.TrimSpace(block[0])
+		value := strings.TrimSpace(block[1])
+		if name == "" || value == "" {
+			continue
+		}
+
+		// 区分处理User-Agent和其他header
 		if reUserAgent.MatchString(header) {
-			ro.UserAgent = block[1]
-		} else if reHeader.MatchString(header) {
-			ro.Headers[block[0]] = block[1]
+			ro.UserAgent = value
+		} else {
+			// } else if reHeader.MatchString(header) {
+			ro.Headers[name] = value
 		}
 	}
 
